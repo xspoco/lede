@@ -81,7 +81,7 @@ ip_rule()
 	
 	echo "create blockip hash:net family inet hashsize 1024 maxelem 65536" > /tmp/blockip.ipset
   awk '!/^$/&&!/^#/{printf("add blockip %s'" "'\n",$0)}' /usr/share/adbyby/blockip.conf >> /tmp/blockip.ipset
-  ipset -! restore < /tmp/blockip.ipset
+  ipset -! restore < /tmp/blockip.ipset 2>/dev/null
   iptables -I FORWARD -m set --match-set blockip dst -j DROP
   iptables -I OUTPUT -m set --match-set blockip dst -j DROP
 }
@@ -172,7 +172,11 @@ start()
       [ ! -d "/tmp/adbyby" ]  && mkdir -p /tmp/adbyby && cp -a $PROG_PATH/data /tmp/adbyby/
       mount --bind /tmp/adbyby/data $PROG_PATH/data
     fi
+    /usr/share/adbyby/admem.sh &
+  else
+    /usr/share/adbyby/adupdate.sh &
 	fi
+	echo "add adbyby rules"
 	add_rules
 	$PROG_PATH/adbyby &>/dev/null &
 	add_dns
@@ -196,6 +200,7 @@ stop()
       umount /usr/share/adbyby/data
     fi
 	fi
+	kill -9 $(ps | grep admem.sh | grep -v grep | awk '{print $1}') >/dev/null 2>&1 
 	/etc/init.d/dnsmasq restart
 }
 

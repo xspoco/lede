@@ -11,10 +11,10 @@ PKG_NAME:=procd
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL=$(LEDE_GIT)/project/procd.git
-PKG_SOURCE_DATE:=2017-08-22
-PKG_SOURCE_VERSION:=54b46a351fab736a92221a6f9c750b5f9da499a1
-PKG_MIRROR_HASH:=dcbeea89910bbdf7d6cf20c38892d6c51de375c8b35c372a7106ae17090694f3
+PKG_SOURCE_URL=$(PROJECT_GIT)/project/procd.git
+PKG_SOURCE_DATE:=2018-11-23
+PKG_SOURCE_VERSION:=d6673547adc3768ce674799fa35952351866c9d0
+PKG_MIRROR_HASH:=ee11e1f652e9268e21dfd7835d26993c682ed33f6ba474c283cb9ef04f71e626
 CMAKE_INSTALL:=1
 
 PKG_LICENSE:=GPL-2.0
@@ -36,6 +36,9 @@ endif
 
 CMAKE_OPTIONS += -DEARLY_PATH="$(TARGET_INIT_PATH)"
 TARGET_LDFLAGS += $(if $(CONFIG_USE_GLIBC),-lrt)
+
+TARGET_CFLAGS += -flto
+TARGET_LDFLAGS += -flto
 
 define Package/procd
   SECTION:=base
@@ -87,9 +90,8 @@ ifdef CONFIG_PACKAGE_procd-ujail
   CMAKE_OPTIONS += -DJAIL_SUPPORT=1
 endif
 
-ifdef CONFIG_PACKAGE_procd-seccomp
-  CMAKE_OPTIONS += -DSECCOMP_SUPPORT=1 -DUTRACE_SUPPORT=1
-endif
+SECCOMP=$(if $(CONFIG_PACKAGE_procd-seccomp),1,0)
+CMAKE_OPTIONS += -DSECCOMP_SUPPORT=$(SECCOMP) -DUTRACE_SUPPORT=$(SECCOMP)
 
 define Package/procd/install
 	$(INSTALL_DIR) $(1)/sbin $(1)/etc $(1)/lib/functions
@@ -97,7 +99,7 @@ define Package/procd/install
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/sbin/{init,procd,askfirst,udevtrigger,upgraded} $(1)/sbin/
 	$(INSTALL_DATA) $(PKG_INSTALL_DIR)/usr/lib/libsetlbf.so $(1)/lib
 	$(INSTALL_BIN) ./files/reload_config $(1)/sbin/
-	$(INSTALL_DATA) ./files/hotplug*.json $(1)/etc/
+	$(INSTALL_CONF) ./files/hotplug*.json $(1)/etc/
 	$(INSTALL_DATA) ./files/procd.sh $(1)/lib/functions/
 endef
 
@@ -110,6 +112,7 @@ define Package/procd-seccomp/install
 	$(INSTALL_DIR) $(1)/sbin $(1)/lib
 	$(INSTALL_DATA) $(PKG_INSTALL_DIR)/usr/lib/libpreload-seccomp.so $(1)/lib
 	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/sbin/utrace $(1)/sbin/
+	$(LN) utrace $(1)/sbin/seccomp-trace
 	$(INSTALL_DATA) $(PKG_INSTALL_DIR)/usr/lib/libpreload-trace.so $(1)/lib
 endef
 

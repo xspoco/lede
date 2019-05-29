@@ -1,16 +1,30 @@
 #!/bin/sh
 
-wget -t 1 -T 10 -O /tmp/lazy.txt http://update.adbyby.com/rule3/lazy.jpg
-wget -t 1 -T 10 -O /tmp/video.txt http://update.adbyby.com/rule3/video.jpg
-wget -t 1 -T 10 -O /tmp/user.action http://update.adbyby.com/rule3/user.action
+rm -f /usr/share/adbyby/data/*.bak
 
-[ ! -s "/tmp/lazy.txt" ] && wget --no-check-certificate -O /tmp/lazy.txt https://raw.githubusercontent.com/adbyby/xwhyc-rules/master/lazy.txt
-[ ! -s "/tmp/video.txt" ] && wget --no-check-certificate -O /tmp/video.txt https://raw.githubusercontent.com/adbyby/xwhyc-rules/master/video.txt
+touch /tmp/local-md5.json && md5sum /usr/share/adbyby/data/lazy.txt /usr/share/adbyby/data/video.txt > /tmp/local-md5.json
+touch /tmp/md5.json && wget-ssl --no-check-certificate -t 1 -T 10 -O /tmp/md5.json https://coding.net/u/adbyby/p/xwhyc-rules/git/raw/master/md5.json
 
-[ -s "/tmp/lazy.txt" ] && ( ! cmp -s /tmp/lazy.txt /usr/share/adbyby/data/lazy.txt ) && mv /tmp/lazy.txt /usr/share/adbyby/data/lazy.txt	
-[ -s "/tmp/video.txt" ] && ( ! cmp -s /tmp/video.txt /usr/share/adbyby/data/video.txt ) && mv /tmp/video.txt /usr/share/adbyby/data/video.txt	
-[ -s "/tmp/user.action" ] && ( ! cmp -s /tmp/user.action /usr/share/adbyby/user.action ) && mv /tmp/user.action /usr/share/adbyby/user.action	
+lazy_local=$(grep 'lazy' /tmp/local-md5.json | awk -F' ' '{print $1}')
+video_local=$(grep 'video' /tmp/local-md5.json | awk -F' ' '{print $1}')  
+lazy_online=$(sed  's/":"/\n/g' /tmp/md5.json  |  sed  's/","/\n/g' | sed -n '2p')
+video_online=$(sed  's/":"/\n/g' /tmp/md5.json  |  sed  's/","/\n/g' | sed -n '4p')
 
-rm -f /tmp/lazy.txt /tmp/video.txt /tmp/user.action
+if [ "$lazy_online"x != "$lazy_local"x -o "$video_online"x != "$video_local"x ]; then
+    echo "MD5 not match! Need update!"
+    touch /tmp/lazy.txt && wget-ssl --no-check-certificate -t 1 -T 10 -O /tmp/lazy.txt https://coding.net/u/adbyby/p/xwhyc-rules/git/raw/master/lazy.txt
+    touch /tmp/video.txt && wget-ssl --no-check-certificate -t 1 -T 10 -O /tmp/video.txt https://coding.net/u/adbyby/p/xwhyc-rules/git/raw/master/video.txt
+    touch /tmp/local-md5.json && md5sum /tmp/lazy.txt /tmp/video.txt > /tmp/local-md5.json
+    lazy_local=$(grep 'lazy' /tmp/local-md5.json | awk -F' ' '{print $1}')
+    video_local=$(grep 'video' /tmp/local-md5.json | awk -F' ' '{print $1}')
+    if [ "$lazy_online"x == "$lazy_local"x -a "$video_online"x == "$video_local"x ]; then
+      echo "New rules MD5 match!"
+      mv /tmp/lazy.txt /usr/share/adbyby/data/lazy.txt
+      mv /tmp/video.txt /usr/share/adbyby/data/video.txt
+      echo $(date +"%Y-%m-%d %H:%M:%S") > /tmp/adbyby.updated
+     fi
+else
+     echo "MD5 match! No need to update!"
+fi
 
-/etc/init.d/adbyby restart
+rm -f /tmp/lazy.txt /tmp/video.txt /tmp/local-md5.json /tmp/md5.json

@@ -8,12 +8,18 @@ PKG_LICENSE_FILES:=
 
 PKG_SOURCE_URL:=https://github.com/greearb/ath10k-ct.git
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_DATE:=2017-05-16
-PKG_SOURCE_VERSION:=c048ef0c3eedf99b41bc12b3f4e47ef3d9fab484
-PKG_MIRROR_HASH:=7936293962a10a0da7469759623013fc151019a6a584cfc6416bc0b605bd74d7
+PKG_SOURCE_DATE:=2019-05-08
+PKG_SOURCE_VERSION:=f98b6dc4d27ea2d79a1577285d1d5cb0641b3eb4
+PKG_MIRROR_HASH:=ca2f0e9da25fc7140d26ddeeb8e929e172755aa0e41e4e92e5b87bb972b8ed41
+
+# Build the 4.19 ath10k-ct driver version.  Other options are "-4.16", or
+# leave un-defined for 4.7 kernel.  Probably this should match as closely as
+# possible to whatever mac80211 backports version is being used.
+CT_KVER="-4.19"
 
 PKG_MAINTAINER:=Ben Greear <greearb@candelatech.com>
 PKG_BUILD_PARALLEL:=1
+PKG_EXTMOD_SUBDIRS:=ath10k$(CT_KVER)
 
 STAMP_CONFIGURED_DEPENDS := $(STAGING_DIR)/usr/include/mac80211-backport/backport/autoconf.h
 
@@ -23,11 +29,20 @@ include $(INCLUDE_DIR)/package.mk
 define KernelPackage/ath10k-ct
   SUBMENU:=Wireless Drivers
   TITLE:=ath10k-ct driver optimized for CT ath10k firmware
-  DEPENDS:=+kmod-mac80211 +kmod-ath +@DRIVER_11N_SUPPORT +@DRIVER_11AC_SUPPORT @PCI_SUPPORT +@KERNEL_RELAY +kmod-hwmon-core
+  DEPENDS:=+kmod-mac80211 +kmod-ath +@DRIVER_11N_SUPPORT +@DRIVER_11AC_SUPPORT +@DRIVER_11W_SUPPORT @PCI_SUPPORT +kmod-hwmon-core
   FILES:=\
-	$(PKG_BUILD_DIR)/ath10k/ath10k_pci.ko \
-	$(PKG_BUILD_DIR)/ath10k/ath10k_core.ko
-  AUTOLOAD:=$(call AutoLoad,50,mac80211 ath ath10k_core ath10k_pci)
+	$(PKG_BUILD_DIR)/ath10k$(CT_KVER)/ath10k_pci.ko \
+	$(PKG_BUILD_DIR)/ath10k$(CT_KVER)/ath10k_core.ko
+  AUTOLOAD:=$(call AutoProbe,ath10k_pci)
+  PROVIDES:=kmod-ath10k
+endef
+
+define KernelPackage/ath10k-ct/config
+
+       config ATH10K-CT_LEDS
+               bool "Enable LED support"
+               default y
+               depends on PACKAGE_kmod-ath10k-ct
 endef
 
 NOSTDINC_FLAGS = \
@@ -43,10 +58,12 @@ ifdef CONFIG_PACKAGE_MAC80211_MESH
   NOSTDINC_FLAGS += -DCONFIG_MAC80211_MESH
 endif
 
-CT_MAKEDEFS += CONFIG_ATH10K=m CONFIG_ATH10K_PCI=m
-# No AHB support enabled yet.  Could conditionally enable it later.
-#CT_MAKEDEFS += CONFIG_ATH10K_AHB=y
-#NOSTDINC_FLAGS += -DCONFIG_ATH10K_AHB
+CT_MAKEDEFS += CONFIG_ATH10K=m CONFIG_ATH10K_PCI=m CONFIG_ATH10K_CE=y
+
+# This AHB logic is needed for IPQ4019 radios
+CT_MAKEDEFS += CONFIG_ATH10K_AHB=m
+NOSTDINC_FLAGS += -DCONFIG_ATH10K_AHB
+
 NOSTDINC_FLAGS += -DSTANDALONE_CT
 
 ifdef CONFIG_PACKAGE_MAC80211_DEBUGFS
@@ -63,6 +80,16 @@ ifdef CONFIG_PACKAGE_ATH_DFS
   NOSTDINC_FLAGS += -DCONFIG_ATH10K_DFS_CERTIFIED
 endif
 
+ifdef CONFIG_PACKAGE_ATH_SPECTRAL
+  CT_MAKEDEFS += CONFIG_ATH10K_SPECTRAL=y
+  NOSTDINC_FLAGS += -DCONFIG_ATH10K_SPECTRAL
+endif
+
+ifeq ($(CONFIG_ATH10K-CT_LEDS),y)
+  CT_MAKEDEFS += CONFIG_ATH10K_LEDS=y
+  NOSTDINC_FLAGS += -DCONFIG_ATH10K_LEDS
+endif
+
 define Build/Configure
 	cp $(STAGING_DIR)/usr/include/mac80211/ath/*.h $(PKG_BUILD_DIR)
 endef
@@ -73,9 +100,8 @@ endif
 
 define Build/Compile
 	+$(MAKE) $(CT_MAKEDEFS) $(PKG_JOBS) -C "$(LINUX_DIR)" \
-		ARCH="$(LINUX_KARCH)" \
-		CROSS_COMPILE="$(TARGET_CROSS)" \
-		SUBDIRS="$(PKG_BUILD_DIR)/ath10k" \
+		$(KERNEL_MAKE_FLAGS) \
+		SUBDIRS="$(PKG_BUILD_DIR)/ath10k$(CT_KVER)" \
 		NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" \
 		modules
 endef
